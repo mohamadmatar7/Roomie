@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
   reactCompiler: true,
+  images: { unoptimized: true }, // optional if you want faster build
 };
 
 export default nextConfig;
