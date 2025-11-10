@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 // Local fallback credentials for development
 const USERNAME = process.env.LOGIN_USERNAME || "admin";
-const HASHED_PASSWORD = process.env.LOGIN_PASSWORD_HASH || "$2b$10$FV3gt4o7LdK2.bj29n8Gie9rD3zewOezZk72DBzJSaG2NiJa0WHWe";
+const HASHED_PASSWORD = process.env.LOGIN_PASSWORD_HASH || "$2b$10$FjPRVtbTjXZlEyhQ5osfNOPlk.9ayOJXao2MLtH2dmypMEimb4xDe";
 
 
 console.log("✅ Login API route loaded");

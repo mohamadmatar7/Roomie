@@ -45,7 +45,7 @@ npm install
 ```bash
 # Optional: override default credentials
 ADMIN_USER=admin
-ADMIN_PASS_HASH='$2b$10$FV3gt4o7LdK2.bj29n8Gie9rD3zewOezZk72DBzJSaG2NiJa0WHWe'
+ADMIN_PASS_HASH='$2b$10$FjPRVtbTjXZlEyhQ5osfNOPlk.9ayOJXao2MLtH2dmypMEimb4xDe'
 ```
 
 > 💡 You can generate a new password hash using:
@@ -83,9 +83,7 @@ Visit 👉 [http://localhost:3000](http://localhost:3000)
 app/
  ├─ api/
  │   └─ login/
- │       └─ route.js            # Login API (POST)
- │   └─ validate/
- │       └─ route.js            
+ │       └─ route.js            # Login API (POST)         
  │
  ├─ dashboard/
  │   └─ page.js                 # Main dashboard page
@@ -174,7 +172,6 @@ Each tab component is self-contained and imported dynamically inside `page.js`.
 | `npm run dev` | Start development server |
 | `npm run build` | Create production build |
 | `npm start` | Start the production server |
-| `npm run lint` | Lint all files |
 
 ---
 
