@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { Moon, Eye, EyeOff } from "lucide-react";
 import Header from "../components/dashboard/Header";
 import Tabs from "../components/dashboard/Tabs";
 import OverviewTab from "../components/dashboard/OverviewTab";
@@ -11,6 +12,7 @@ import EmergencyAlert from "../components/dashboard/EmergencyAlert";
 
 export default function RoomieDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -63,34 +65,82 @@ export default function RoomieDashboard() {
   }, []);
 
   // Authentication check
-  useEffect(() => {
-    const token = localStorage.getItem("roomieToken");
-    if (token) setIsAuthenticated(true);
-    setCheckingAuth(false);
-  }, []);
+  // useEffect(() => {
+  //   const token = localStorage.getItem("roomieToken");
+  //   if (token) setIsAuthenticated(true);
+  //   setCheckingAuth(false);
+  // }, []);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    const res = await fetch("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      localStorage.setItem("roomieToken", data.token);
-      setIsAuthenticated(true);
-    } else {
-      alert("Ongeldige inloggegevens");
+  // const handleLogin = async (e) => {
+  //   e.preventDefault();
+  //   const res = await fetch("/api/login", {
+  //     method: "POST",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: JSON.stringify({ username, password }),
+  //   });
+  //   const data = await res.json();
+  //   if (data.success) {
+  //     localStorage.setItem("roomieToken", data.token);
+  //     setIsAuthenticated(true);
+  //   } else {
+  //     alert("Ongeldige inloggegevens");
+  //   }
+  // };
+
+  // const handleLogout = () => {
+  //   localStorage.removeItem("roomieToken");
+  //   setIsAuthenticated(false);
+  //   setUsername("");
+  //   setPassword("");
+  // };
+
+
+useEffect(() => {
+  const checkAuth = async () => {
+    try {
+      const res = await fetch("/api/validate", { method: "GET" });
+      const data = await res.json();
+      if (data.valid) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Auth check failed:", err);
+      setIsAuthenticated(false);
+    } finally {
+      setCheckingAuth(false);
     }
   };
+  checkAuth();
+}, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("roomieToken");
-    setIsAuthenticated(false);
-    setUsername("");
-    setPassword("");
-  };
+// ✅ Login function - now sets a secure cookie
+const handleLogin = async (e) => {
+  e.preventDefault();
+
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  const data = await res.json();
+  if (data.success && data.token) {
+    // ✅ store token as secure cookie
+    document.cookie = `roomieToken=${data.token}; path=/; max-age=28800; secure; samesite=strict`;
+    setIsAuthenticated(true);
+  } else {
+    alert("Invalid credentials");
+  }
+};
+
+// ✅ Logout function - clears cookie and resets auth state
+const handleLogout = () => {
+  document.cookie = "roomieToken=; Max-Age=0; path=/;";
+  setIsAuthenticated(false);
+};
+
 
   const toggleLight = () => setLightOn(!lightOn);
   const playStory = (id) => {
@@ -111,42 +161,50 @@ export default function RoomieDashboard() {
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 w-full max-w-md border border-white/20 shadow-2xl">
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
-              🌙
+            <Moon className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-4xl font-bold text-white mb-2">Roomie</h1>
-            <p className="text-purple-200">Jouw slimme kamer-vriend</p>
+            <p className="text-purple-200">Jouw slimme kamer vriend</p>
+          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-white mb-2 text-sm font-medium">Gebruikersnaam</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              placeholder="Voer gebruikersnaam in"
+            />
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-white mb-2 text-sm font-medium">Gebruikersnaam</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                placeholder="Voer gebruikersnaam in"
-              />
-            </div>
+          <div className="relative">
+            <label className="block text-white mb-2 text-sm font-medium">Wachtwoord</label>
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 pr-12 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              placeholder="Voer wachtwoord in"
+            />
 
-            <div>
-              <label className="block text-white mb-2 text-sm font-medium">Wachtwoord</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                placeholder="Voer wachtwoord in"
-              />
-            </div>
-
+            {/* 👁 Eye icon button */}
             <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2  flex items-center justify-center text-white/70 hover:text-white focus:outline-none"
             >
-              Inloggen
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
-          </form>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg hover:shadow-xl"
+          >
+            Inloggen
+          </button>
+        </form>
         </div>
       </div>
     );
