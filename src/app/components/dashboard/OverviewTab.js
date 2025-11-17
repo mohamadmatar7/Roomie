@@ -1,6 +1,27 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Sun, Moon, ThermometerSun, Volume2 } from "lucide-react";
+
+const CORE_BASE_URL =
+  (typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_API_BASE_URL) ||
+  "";
+
+// ✅ Local date helper (no timezone issues)
+function getLocalISODate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// ✅ Parse schedule {date, time} into a local Date object
+function parsePlanDate(plan) {
+  if (!plan?.date || !plan?.time) return null;
+  const [year, month, day] = plan.date.slice(0, 10).split("-").map(Number);
+  const [h, m] = plan.time.split(":").map(Number);
+  return new Date(year, month - 1, day, h || 0, m || 0, 0, 0);
+}
 
 export default function OverviewTab({
   lightOn,
@@ -16,11 +37,88 @@ export default function OverviewTab({
   isPlaying,
   currentStory,
   stories,
+  // still received, but we’ll prefer today’s schedule from backend
   scheduledTime,
   scheduledStory,
   setActiveTab,
   setIsPlaying,
 }) {
+  const [todayPlan, setTodayPlan] = useState(null);
+  const [loadingPlan, setLoadingPlan] = useState(true);
+
+  // 🧠 Stop current story on Roomie core
+  const handleStop = async () => {
+    const base = CORE_BASE_URL.replace(/\/$/, "");
+    if (!base) {
+      console.error("CORE_BASE_URL is not configured");
+      setIsPlaying(false);
+      return;
+    }
+
+    try {
+      await fetch(`${base}/api/player/stop`, {
+        method: "POST",
+      });
+      console.log("⏹️ Stop command sent to Roomie core");
+    } catch (err) {
+      console.error("❌ Failed to send stop command:", err);
+    } finally {
+      // Update UI state anyway
+      setIsPlaying(false);
+    }
+  };
+
+  // 📅 Load *today's* schedule from backend
+  useEffect(() => {
+    const loadTodayPlan = async () => {
+      try {
+        const res = await fetch("/api/schedule/get");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const now = new Date();
+        const todayStr = getLocalISODate(now);
+
+        const withDates = (Array.isArray(data) ? data : [])
+          .map((p) => {
+            const d = parsePlanDate(p);
+            return { ...p, _dateObj: d };
+          })
+          .filter(
+            (p) =>
+              p._dateObj &&
+              getLocalISODate(p._dateObj) === todayStr && // only today
+              p._dateObj >= now // only upcoming, not past
+          )
+          .sort((a, b) => a._dateObj - b._dateObj); // nearest first
+
+        setTodayPlan(withDates[0] || null);
+      } catch (err) {
+        console.error("❌ Failed to load today's schedule:", err);
+      } finally {
+        setLoadingPlan(false);
+      }
+    };
+
+    loadTodayPlan();
+  }, [stories.length]); // reload if stories list changes (new story etc.)
+
+  // 🎯 Pick which plan to show under "Gepland voor vanavond"
+  let plannedStory = null;
+  let plannedTimeLabel = "";
+  let hasPlan = false;
+
+  if (todayPlan) {
+    plannedStory = stories.find((s) => s.id === todayPlan.storyId);
+    plannedTimeLabel = todayPlan.time;
+    hasPlan = !!(plannedStory && plannedTimeLabel);
+  } else if (scheduledStory && scheduledTime) {
+    // fallback to props if nothing from backend
+    plannedStory = stories.find((s) => s.id === scheduledStory);
+    plannedTimeLabel = scheduledTime;
+    hasPlan = !!(plannedStory && plannedTimeLabel);
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {/* Light Control */}
@@ -63,16 +161,20 @@ export default function OverviewTab({
             <div>
               <label className="text-white text-sm mb-2 block">Kleur</label>
               <div className="flex gap-2">
-                {["#FFB366", "#FF6B6B", "#4ECDC4", "#95E1D3", "#F38181"].map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => setLightColor(color)}
-                    className={`w-10 h-10 rounded-full border-2 ${
-                      lightColor === color ? "border-white" : "border-transparent"
-                    }`}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
+                {["#FFB366", "#FF6B6B", "#4ECDC4", "#95E1D3", "#F38181"].map(
+                  (color) => (
+                    <button
+                      key={color}
+                      onClick={() => setLightColor(color)}
+                      className={`w-10 h-10 rounded-full border-2 ${
+                        lightColor === color
+                          ? "border-white"
+                          : "border-transparent"
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  )
+                )}
               </div>
             </div>
 
@@ -98,11 +200,15 @@ export default function OverviewTab({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-white/70">Temperatuur</span>
-            <span className="text-white font-semibold">{temperature.toFixed(1)}°C</span>
+            <span className="text-white font-semibold">
+              {temperature.toFixed(1)}°C
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-white/70">Luchtvochtigheid</span>
-            <span className="text-white font-semibold">{humidity.toFixed(0)}%</span>
+            <span className="text-white font-semibold">
+              {humidity.toFixed(0)}%
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-white/70">Lichtsterkte</span>
@@ -110,12 +216,16 @@ export default function OverviewTab({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-white/70">Geluidsniveau</span>
-            <span className="text-white font-semibold">{soundLevel.toFixed(0)} dB</span>
+            <span className="text-white font-semibold">
+              {soundLevel.toFixed(0)} dB
+            </span>
           </div>
         </div>
 
         <div className="mt-4 p-3 bg-green-500/20 rounded-lg border border-green-500/30">
-          <p className="text-green-200 text-sm text-center">✓ Alles is oké</p>
+          <p className="text-green-200 text-sm text-center">
+            ✓ Alles is oké
+          </p>
         </div>
       </div>
 
@@ -130,12 +240,15 @@ export default function OverviewTab({
           <div className="space-y-4">
             <div className="bg-purple-500/20 rounded-lg p-4 border border-purple-500/30">
               <p className="text-white font-medium">
-                {stories.find((s) => s.id === currentStory)?.name}
+                {stories.find((s) => s.id === currentStory)?.name ||
+                  "Onbekend verhaal"}
               </p>
-              <p className="text-white/70 text-sm mt-1">Nu aan het spelen...</p>
+              <p className="text-white/70 text-sm mt-1">
+                Nu aan het spelen...
+              </p>
             </div>
             <button
-              onClick={() => setIsPlaying(false)}
+              onClick={handleStop}
               className="w-full bg-red-500 text-white py-3 rounded-lg hover:bg-red-600 transition-all flex items-center justify-center gap-2"
             >
               Stop
@@ -143,7 +256,9 @@ export default function OverviewTab({
           </div>
         ) : (
           <div className="text-center py-8">
-            <p className="text-white/70 mb-4">Geen verhaal aan het spelen</p>
+            <p className="text-white/70 mb-4">
+              Geen verhaal aan het spelen
+            </p>
             <button
               onClick={() => setActiveTab("stories")}
               className="px-6 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-all"
@@ -154,10 +269,21 @@ export default function OverviewTab({
         )}
 
         <div className="mt-4 pt-4 border-t border-white/10">
-          <p className="text-white/70 text-sm mb-2">Gepland voor vanavond:</p>
-          <p className="text-white font-medium">
-            {scheduledTime} - {stories.find((s) => s.id === scheduledStory)?.name}
+          <p className="text-white/70 text-sm mb-2">
+            Gepland voor vanavond:
           </p>
+
+          {loadingPlan ? (
+            <p className="text-white/60 text-sm">Planning laden...</p>
+          ) : hasPlan ? (
+            <p className="text-white font-medium">
+              {plannedTimeLabel} - {plannedStory?.name}
+            </p>
+          ) : (
+            <p className="text-white/60 text-sm">
+              Geen planning voor vandaag
+            </p>
+          )}
         </div>
       </div>
     </div>

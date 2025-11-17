@@ -9,6 +9,8 @@ import CameraTab from "../components/dashboard/CameraTab";
 import SensorsTab from "../components/dashboard/SensorsTab";
 import LogTab from "../components/dashboard/LogTab";
 import EmergencyAlert from "../components/dashboard/EmergencyAlert";
+// ❌ VoiceUnlocker is no longer needed because audio plays only on the core
+// import VoiceUnlocker from "../components/dashboard/VoiceUnlocker";
 
 export default function RoomieDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -29,12 +31,11 @@ export default function RoomieDashboard() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [emergencyAlert, setEmergencyAlert] = useState(false);
 
-  // Stories
-  const [stories, setStories] = useState([
-    { id: 1, name: "De Kleine Prins", duration: "8:30", uploaded: "2025-11-08" },
-    { id: 2, name: "Slaapliedje", duration: "3:45", uploaded: "2025-11-05" },
-    { id: 3, name: "Het Bos Avontuur", duration: "12:15", uploaded: "2025-11-01" },
-  ]);
+  // Stories (from backend)
+  const [stories, setStories] = useState([]);
+  const [loadingStories, setLoadingStories] = useState(true);
+
+  // Player / schedule state in the dashboard
   const [currentStory, setCurrentStory] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [scheduledTime, setScheduledTime] = useState("20:30");
@@ -46,7 +47,7 @@ export default function RoomieDashboard() {
   const [lightLevel, setLightLevel] = useState(15);
   const [soundLevel, setSoundLevel] = useState(28);
 
-  // Night log
+  // Night log (dummy for now)
   const [nightLog, setNightLog] = useState([
     { time: "20:30", event: "Verhaal gestart", type: "story" },
     { time: "20:42", event: "Verhaal beëindigd", type: "story" },
@@ -54,100 +55,151 @@ export default function RoomieDashboard() {
     { time: "02:30", event: "Beweging in kamer", type: "motion" },
   ]);
 
-  // Simulate live sensor changes
+  // 🌐 Core API base URL (public, coming from Vercel env)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+  // Small state for core/Roomie status (used in header badge)
+  const [coreStatus, setCoreStatus] = useState({
+    online: false,
+    checking: true,
+  });
+
+  // 🔁 Load stories once from Next API (which should proxy to the core)
+  useEffect(() => {
+    const fetchStories = async () => {
+      try {
+        const res = await fetch("/api/story/list");
+        const data = await res.json();
+
+        // Map DB stories to frontend format
+        const mapped = data.map((s) => ({
+          id: s.id,
+          name: s.title,
+          text: s.refinedText || s.originalText,
+          duration: s.duration || "0:00",
+          uploaded: new Date(s.createdAt).toISOString().split("T")[0],
+        }));
+
+        setStories(mapped);
+      } catch (err) {
+        console.error("Failed to load stories:", err);
+      } finally {
+        setLoadingStories(false);
+      }
+    };
+
+    fetchStories();
+  }, []);
+
+  // 📈 Simulate live sensor changes
   useEffect(() => {
     const interval = setInterval(() => {
-      setTemperature((prev) => Math.max(18, Math.min(24, prev + (Math.random() - 0.5) * 0.2)));
-      setHumidity((prev) => Math.max(35, Math.min(60, prev + (Math.random() - 0.5) * 2)));
-      setSoundLevel((prev) => Math.max(0, Math.min(60, prev + (Math.random() - 0.5) * 5)));
+      setTemperature((prev) =>
+        Math.max(18, Math.min(24, prev + (Math.random() - 0.5) * 0.2))
+      );
+      setHumidity((prev) =>
+        Math.max(35, Math.min(60, prev + (Math.random() - 0.5) * 2))
+      );
+      setSoundLevel((prev) =>
+        Math.max(0, Math.min(60, prev + (Math.random() - 0.5) * 5))
+      );
     }, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // Authentication check
-  // useEffect(() => {
-  //   const token = localStorage.getItem("roomieToken");
-  //   if (token) setIsAuthenticated(true);
-  //   setCheckingAuth(false);
-  // }, []);
-
-  // const handleLogin = async (e) => {
-  //   e.preventDefault();
-  //   const res = await fetch("/api/login", {
-  //     method: "POST",
-  //     headers: { "Content-Type": "application/json" },
-  //     body: JSON.stringify({ username, password }),
-  //   });
-  //   const data = await res.json();
-  //   if (data.success) {
-  //     localStorage.setItem("roomieToken", data.token);
-  //     setIsAuthenticated(true);
-  //   } else {
-  //     alert("Ongeldige inloggegevens");
-  //   }
-  // };
-
-  // const handleLogout = () => {
-  //   localStorage.removeItem("roomieToken");
-  //   setIsAuthenticated(false);
-  //   setUsername("");
-  //   setPassword("");
-  // };
-
-
-useEffect(() => {
-  const checkAuth = async () => {
-    try {
-      const res = await fetch("/api/validate", { method: "GET" });
-      const data = await res.json();
-      if (data.valid) {
-        setIsAuthenticated(true);
-      } else {
+  // 🔐 Authentication check via secure cookie + /api/validate
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/validate", { method: "GET" });
+        const data = await res.json();
+        if (data.valid) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
         setIsAuthenticated(false);
+      } finally {
+        setCheckingAuth(false);
       }
-    } catch (err) {
-      console.error("Auth check failed:", err);
-      setIsAuthenticated(false);
-    } finally {
-      setCheckingAuth(false);
+    };
+    checkAuth();
+  }, []);
+
+  // ✅ Login function - stores token as secure cookie
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await res.json();
+    if (data.success && data.token) {
+      document.cookie =
+        "roomieToken=" +
+        data.token +
+        "; path=/; max-age=28800; secure; samesite=strict";
+      setIsAuthenticated(true);
+    } else {
+      alert("Invalid credentials");
     }
   };
-  checkAuth();
-}, []);
 
-// ✅ Login function - now sets a secure cookie
-const handleLogin = async (e) => {
-  e.preventDefault();
+  // ✅ Logout function - clears cookie and resets auth state
+  const handleLogout = () => {
+    document.cookie = "roomieToken=; Max-Age=0; path=/;";
+    setIsAuthenticated(false);
+  };
 
-  const res = await fetch("/api/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
+  // 💡 Light toggle (later can be wired to core via API)
+  const toggleLight = () => setLightOn((prev) => !prev);
 
-  const data = await res.json();
-  if (data.success && data.token) {
-    // ✅ store token as secure cookie
-    document.cookie = `roomieToken=${data.token}; path=/; max-age=28800; secure; samesite=strict`;
-    setIsAuthenticated(true);
-  } else {
-    alert("Invalid credentials");
-  }
-};
-
-// ✅ Logout function - clears cookie and resets auth state
-const handleLogout = () => {
-  document.cookie = "roomieToken=; Max-Age=0; path=/;";
-  setIsAuthenticated(false);
-};
-
-
-  const toggleLight = () => setLightOn(!lightOn);
+  // ▶️ Local helper to mark which story is “current”
   const playStory = (id) => {
     setCurrentStory(id);
     setIsPlaying(true);
+    // Later we can call `${API_BASE_URL}/api/player/play` from StoriesTab,
+    // here we only sync UI.
   };
 
+  // 🌍 Ping the core regularly to show "Roomie online/offline" in the header
+  useEffect(() => {
+    const pingCore = async () => {
+      if (!API_BASE_URL) {
+        // If base URL is missing, just mark offline but stop "checking" spinner
+        setCoreStatus((prev) => ({ ...prev, online: false, checking: false }));
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/player/status`);
+        if (!res.ok) throw new Error("Bad status");
+        const data = await res.json().catch(() => ({}));
+
+        // We treat a successful response as "online"
+        setCoreStatus({
+          online: !!data.ok,
+          checking: false,
+        });
+      } catch (err) {
+        console.error("Core status check failed:", err);
+        setCoreStatus((prev) => ({ ...prev, online: false, checking: false }));
+      }
+    };
+
+    // First immediate ping
+    pingCore();
+    // Then ping every 10 seconds
+    const interval = setInterval(pingCore, 10000);
+    return () => clearInterval(interval);
+  }, [API_BASE_URL]);
+
+  // ⏳ While checking auth
   if (checkingAuth)
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
@@ -155,65 +207,82 @@ const handleLogout = () => {
       </div>
     );
 
+  // 🔒 Not authenticated → login screen
   if (!isAuthenticated)
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 w-full max-w-md border border-white/20 shadow-2xl">
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
-            <Moon className="w-6 h-6 text-white" />
+              <Moon className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-4xl font-bold text-white mb-2">Roomie</h1>
             <p className="text-purple-200">Jouw slimme kamer vriend</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-white mb-2 text-sm font-medium">Gebruikersnaam</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
-              placeholder="Voer gebruikersnaam in"
-            />
-          </div>
+            <div>
+              <label className="block text-white mb-2 text-sm font-medium">
+                Gebruikersnaam
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                placeholder="Voer gebruikersnaam in"
+              />
+            </div>
 
-          <div className="relative">
-            <label className="block text-white mb-2 text-sm font-medium">Wachtwoord</label>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 pr-12 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
-              placeholder="Voer wachtwoord in"
-            />
+            <div className="relative">
+              <label className="block text-white mb-2 text-sm font-medium">
+                Wachtwoord
+              </label>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 pr-12 bg-white/20 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                placeholder="Voer wachtwoord in"
+              />
 
-            {/* 👁 Eye icon button */}
+              {/* 👁 Toggle password visibility */}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center text-white/70 hover:text-white focus:outline-none"
+              >
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+
             <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2  flex items-center justify-center text-white/70 hover:text-white focus:outline-none"
+              type="submit"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              Inloggen
             </button>
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
-            Inloggen
-          </button>
-        </form>
+          </form>
         </div>
       </div>
     );
 
+  // ✅ Authenticated → main dashboard
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {emergencyAlert && <EmergencyAlert setEmergencyAlert={setEmergencyAlert} />}
+      {/* No more VoiceUnlocker, audio is fully handled on the core */}
+      {emergencyAlert && (
+        <EmergencyAlert setEmergencyAlert={setEmergencyAlert} />
+      )}
 
-      <Header handleLogout={handleLogout} setEmergencyAlert={setEmergencyAlert} />
+      <Header
+        handleLogout={handleLogout}
+        setEmergencyAlert={setEmergencyAlert}
+        coreStatus={coreStatus}
+      />
 
       <div className="max-w-7xl mx-auto p-4">
         <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -247,7 +316,7 @@ const handleLogout = () => {
             {...{
               stories,
               setStories,
-              playStory,
+              playStory, // can be used to sync "current story" with overview
               scheduledTime,
               setScheduledTime,
               scheduledStory,
@@ -271,7 +340,9 @@ const handleLogout = () => {
         )}
 
         {activeTab === "sensors" && (
-          <SensorsTab {...{ temperature, humidity, lightLevel, soundLevel }} />
+          <SensorsTab
+            {...{ temperature, humidity, lightLevel, soundLevel }}
+          />
         )}
 
         {activeTab === "log" && <LogTab nightLog={nightLog} />}

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import Header from "./Header";
 import Tabs from "./Tabs";
 import OverviewTab from "./OverviewTab";
-import StoriesTab from "./StoriesTab";
+import StoriesTab from "./StoriesTabOld";
 import CameraTab from "./CameraTab";
 import SensorsTab from "./SensorsTab";
 import LogTab from "./LogTab";
