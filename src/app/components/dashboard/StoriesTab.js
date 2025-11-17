@@ -54,6 +54,9 @@ export default function StoriesTab({
   const [cleaned, setCleaned] = useState(false);
   const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const [plansRefreshToken, setPlansRefreshToken] = useState(0);
+  const [newAudioUrl, setNewAudioUrl] = useState("");
+  const [newAudioFile, setNewAudioFile] = useState(null);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
   const currentAudioRef = useRef(null); // reserved for future local audio usage
   const playingStoryIdRef = useRef(null);
 
@@ -82,38 +85,103 @@ export default function StoriesTab({
 
   // 🧩 Add story
   const handleAddStory = async () => {
-    if (!newTitle.trim() || !newText.trim()) {
-      showToast("Titel en tekst vereist", "error");
+    const title = newTitle.trim();
+    const text = newText.trim();
+    const manualAudioUrl = newAudioUrl.trim();
+
+    // Require a title
+    if (!title) {
+      showToast("Titel vereist", "error");
       return;
     }
+
+    // Require at least text OR audio (URL or file)
+    if (!text && !manualAudioUrl && !newAudioFile) {
+      showToast("Tekst of audio vereist", "error");
+      return;
+    }
+
     try {
       setLoading(true);
+
+      // 1) Upload audio file to core if a file is selected
+      let finalAudioUrl = manualAudioUrl || null;
+
+      if (newAudioFile) {
+        if (!CORE_BASE_URL) {
+          showToast("Core URL niet ingesteld", "error");
+          return;
+        }
+
+        setUploadingAudio(true);
+        try {
+          const base = CORE_BASE_URL.replace(/\/$/, "");
+          const formData = new FormData();
+          formData.append("file", newAudioFile);
+
+          const uploadRes = await fetch(`${base}/api/upload/audio`, {
+            method: "POST",
+            body: formData,
+          });
+
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok || !uploadData.ok) {
+            throw new Error(uploadData.error || "Audio upload mislukt");
+          }
+
+          // Use the public URL returned by the core (e.g. /media/audio/...)
+          finalAudioUrl = uploadData.url;
+        } catch (err) {
+          console.error("Audio upload error:", err);
+          showToast("Audio upload mislukt", "error");
+          return; // do not continue if upload failed
+        } finally {
+          setUploadingAudio(false);
+        }
+      }
+
+      // 2) Create story via web API route (/api/story/add)
       const res = await fetch("/api/story/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: newTitle,
-          text: newText,
+          title,
+          text: text || null,
           language: detectedLang,
+          audioUrl: finalAudioUrl, // optional: MP3 on core
         }),
       });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
 
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Add story failed:", data);
+        showToast(data.error || "Fout bij toevoegen", "error");
+        return;
+      }
+
+      // Map response to local story shape
       const newStory = {
         id: data.id,
         name: data.title,
-        text: data.refinedText || data.originalText,
-        language: detectedLang,
+        text: data.refinedText || data.originalText || text,
+        language: data.language || detectedLang,
         uploaded: new Date(data.createdAt).toISOString().split("T")[0],
+        audioUrl: data.audioUrl || finalAudioUrl || null,
       };
 
+      // Prepend new story to list
       setStories((prev) => [newStory, ...prev]);
+
+      // Reset form fields
       setShowAddModal(false);
       setNewTitle("");
       setNewText("");
+      setNewAudioUrl("");
+      setNewAudioFile(null);
+
       showToast("Verhaal toegevoegd!");
-    } catch {
+    } catch (err) {
+      console.error("Add story error:", err);
       showToast("Fout bij toevoegen", "error");
     } finally {
       setLoading(false);
@@ -491,6 +559,11 @@ export default function StoriesTab({
             handleAddStory={handleAddStory}
             loading={loading}
             setShowAddModal={setShowAddModal}
+            newAudioUrl={newAudioUrl}
+            setNewAudioUrl={setNewAudioUrl}
+            newAudioFile={newAudioFile}
+            setNewAudioFile={setNewAudioFile}
+            uploadingAudio={uploadingAudio}
           />
         )}
 

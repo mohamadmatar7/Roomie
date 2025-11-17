@@ -4,14 +4,26 @@ const CORE_BASE = process.env.ROOMIE_CORE_API_BASE_URL;
 
 export async function POST(req) {
   try {
-    const { title, text, language: clientLang } = await req.json();
+    const { title, text, language: clientLang, audioUrl } = await req.json();
 
-    if (!title || !text) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    const trimmedTitle = title?.trim();
+    const trimmedText = text?.trim?.() || "";
+    const trimmedAudioUrl = audioUrl?.trim?.() || "";
+
+    // Should have title
+    // Should have either text or audio (URL)
+    if (!trimmedTitle || (!trimmedText && !trimmedAudioUrl)) {
+      return NextResponse.json(
+        { error: "Titel + (tekst of audio) vereist" },
+        { status: 400 }
+      );
     }
 
-    // Prompt to enhance the story text for smooth voice narration
-    const prompt = `
+    let refined = null;
+
+    // 📝 Do refinement only if there is actual text
+    if (trimmedText) {
+      const prompt = `
 You are a storytelling editor.
 Prepare this story for smooth spoken narration.
 - Do NOT translate it.
@@ -19,33 +31,35 @@ Prepare this story for smooth spoken narration.
 - Only fix punctuation, rhythm, and flow.
 Return only the improved version in the same language.
 ---
-${text}
+${trimmedText}
 ---
 `;
 
-    // Request text enhancement from OpenAI (server-side, key not exposed to frontend)
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.4,
-      }),
-    });
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.4,
+        }),
+      });
 
-    const data = await res.json();
-    const refined = data.choices?.[0]?.message?.content?.trim() || text;
+      const data = await res.json();
+      refined = data.choices?.[0]?.message?.content?.trim() || trimmedText;
+    }
 
-    // 🌍 Detect language (same old logic)
+    // 🌍 Detect language (same old logic, but only if there is text)
     let language = clientLang || "en-GB";
-    const lower = text.toLowerCase();
-    if (/[أ-ي]/.test(text)) language = "ar-SA";
-    else if (/de |het |een |zijn|bos|leeuw/.test(lower)) language = "nl-NL";
-    else if (/the |and |once upon/.test(lower)) language = "en-GB";
+    if (trimmedText) {
+      const lower = trimmedText.toLowerCase();
+      if (/[أ-ي]/.test(trimmedText)) language = "ar-SA";
+      else if (/de |het |een |zijn|bos|leeuw/.test(lower)) language = "nl-NL";
+      else if (/the |and |once upon/.test(lower)) language = "en-GB";
+    }
 
     if (!CORE_BASE) {
       throw new Error("ROOMIE_CORE_API_BASE_URL is not set");
@@ -56,11 +70,12 @@ ${text}
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: title.trim(),
-        originalText: text,
-        refinedText: refined,
+        title: trimmedTitle,
+        originalText: trimmedText || null,
+        refinedText: refined || null,
         language,
-        // voice / duration / audioUrl ممكن نملّيهم لاحقاً لما نضيف TTS من core
+        audioUrl: trimmedAudioUrl || null, // 🆕 Pass the MP3 URL if available
+        // story_type might still be determined by core based on what's provided
       }),
     });
 
@@ -70,14 +85,14 @@ ${text}
       throw new Error(coreData?.error || "Failed to create story in core");
     }
 
-    // 🔁 بعض الأحيان الـ core ممكن يرجّع:
-    // { ok: true, story: {...} } أو يرجّع {...} مباشرة
+    // 🔁 Sometimes core might return:
+    // { ok: true, story: {...} } or {...} directly
     const story = coreData.story || coreData;
 
     console.log("✅ Story saved in core:", story.title, "-", story.language);
 
-    // ⚠️ مهم: نرجّع الـ story object نفسه للـ frontend،
-    // لأن StoriesTab تتوقع data.id / data.title / data.refinedText / data.originalText / data.createdAt
+    // ⚠️ Important: return the same story object to the frontend,
+    // because StoriesTab expects data.id / data.title / data.refinedText / data.originalText / data.createdAt / (audioUrl)
     return NextResponse.json(story, { status: 201 });
   } catch (error) {
     console.error("❌ Add Story Error (via core):", error);
