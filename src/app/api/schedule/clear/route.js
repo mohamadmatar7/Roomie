@@ -1,24 +1,3 @@
-// import { NextResponse } from "next/server";
-// import prisma from "@/lib/prisma";
-
-// // 🧹 DELETE /api/schedule/clear
-// export async function DELETE() {
-//   try {
-//     // 🗑️ Remove all schedules
-//     await prisma.schedule.deleteMany();
-
-//     // ✅ Return an empty list (no schedules left)
-//     return NextResponse.json([], { status: 200 });
-//   } catch (error) {
-//     console.error("❌ Schedule clear error:", error);
-//     return NextResponse.json(
-//       { error: "Er is iets misgegaan bij het verwijderen van alle planningen." },
-//       { status: 500 }
-//     );
-//   }
-// }
-
-
 import { NextResponse } from "next/server";
 
 const CORE_BASE = process.env.ROOMIE_CORE_API_BASE_URL;

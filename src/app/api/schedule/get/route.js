@@ -1,21 +1,3 @@
-// import { NextResponse } from "next/server";
-// import prisma from "@/lib/prisma";
-
-
-// export async function GET() {
-//   try {
-//     const schedules = await prisma.schedule.findMany({
-//       orderBy: { date: "asc" },
-//       include: { story: true },
-//     });
-//     // ✅ Fix: Serialize safely
-//     return NextResponse.json(JSON.parse(JSON.stringify(schedules)));
-//   } catch (error) {
-//     console.error("❌ Fetch schedule error:", error);
-//     return NextResponse.json({ error: error.message }, { status: 500 });
-//   }
-// }
-
 import { NextResponse } from "next/server";
 
 const CORE_BASE = process.env.ROOMIE_CORE_API_BASE_URL;

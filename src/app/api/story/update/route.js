@@ -1,29 +1,3 @@
-// import { NextResponse } from "next/server";
-// import prisma from "@/lib/prisma";
-
-
-// export async function PUT(req) {
-//   try {
-//     const { id, title, text } = await req.json();
-//     if (!id || !title || !text)
-//       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-
-//     const updated = await prisma.story.update({
-//       where: { id: parseInt(id) },
-//       data: {
-//         title,
-//         refinedText: text,
-//         updatedAt: new Date(),
-//       },
-//     });
-
-//     return NextResponse.json(updated);
-//   } catch (error) {
-//     console.error("❌ Update story error:", error);
-//     return NextResponse.json({ error: error.message }, { status: 500 });
-//   }
-// }
-
 import { NextResponse } from "next/server";
 
 const CORE_BASE = process.env.ROOMIE_CORE_API_BASE_URL;

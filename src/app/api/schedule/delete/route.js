@@ -1,21 +1,3 @@
-// import { NextResponse } from "next/server";
-// import prisma from "@/lib/prisma";
-
-
-// export async function DELETE(req) {
-//   try {
-//     const { searchParams } = new URL(req.url);
-//     const id = Number(searchParams.get("id"));
-//     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
-
-//     await prisma.schedule.delete({ where: { id } });
-//     return NextResponse.json({ success: true });
-//   } catch (error) {
-//     console.error("❌ Schedule delete error:", error);
-//     return NextResponse.json({ error: error.message }, { status: 500 });
-//   }
-// }
-
 import { NextResponse } from "next/server";
 
 const CORE_BASE = process.env.ROOMIE_CORE_API_BASE_URL;
