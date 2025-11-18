@@ -46,6 +46,32 @@ export default function OverviewTab({
   const [todayPlan, setTodayPlan] = useState(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
 
+  // 💡 Sync nacht-lampje state with Roomie core (WS2812B ring)
+  useEffect(() => {
+    const base = CORE_BASE_URL.replace(/\/$/, "");
+    if (!base) return;
+
+    const syncLight = async () => {
+      try {
+        await fetch(`${base}/api/light/set`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            on: !!lightOn,
+            brightness: Number(brightness),
+            color: lightColor,
+          }),
+        });
+      } catch (err) {
+        console.error("❌ Failed to sync light state:", err);
+      }
+    };
+
+    syncLight();
+  }, [lightOn, brightness, lightColor]);
+
   // 🧠 Stop current story on Roomie core
   const handleStop = async () => {
     const base = CORE_BASE_URL.replace(/\/$/, "");
