@@ -107,6 +107,79 @@ export default function RoomieDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // 🌡️💡🎤 Fetch real sensor data from the core API (light + optional others)
+  useEffect(() => {
+    if (!API_BASE_URL) {
+      console.warn("NEXT_PUBLIC_API_BASE_URL is not set");
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchSensorsFromCore = async () => {
+      try {
+        // Adjust this path to your core sensors endpoint if needed
+        const res = await fetch(`${API_BASE_URL}/api/sensors`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error(`Core sensors request failed: ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (!isMounted) return;
+
+        // Temperature & humidity (if provided by core)
+        if (typeof data.temperature === "number") {
+          setTemperature(data.temperature);
+        }
+
+        if (typeof data.humidity === "number") {
+          setHumidity(data.humidity);
+        }
+
+        // Light: map raw visible value to 0–100% for UI
+        if (data.light) {
+          const visibleRaw =
+            typeof data.light.visible === "number"
+              ? data.light.visible
+              : typeof data.light.ch0 === "number"
+              ? data.light.ch0
+              : 0;
+
+          // Simple normalization: assume 0–500 as practical range
+          const normalized = Math.max(
+            0,
+            Math.min(100, (visibleRaw / 500) * 100)
+          );
+
+          setLightLevel(Math.round(normalized));
+        }
+
+        // Sound level in dB (if provided)
+        if (data.sound && typeof data.sound.levelDb === "number") {
+          setSoundLevel(data.sound.levelDb);
+        }
+      } catch (err) {
+        console.error("Failed to fetch sensors from core:", err);
+      }
+    };
+
+    // Initial fetch
+    fetchSensorsFromCore();
+    // Poll every 5 seconds (reasonable, not too frequent)
+    const intervalId = setInterval(fetchSensorsFromCore, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [API_BASE_URL]);
+
   // 🔐 Authentication check via secure cookie + /api/validate
   useEffect(() => {
     const checkAuth = async () => {

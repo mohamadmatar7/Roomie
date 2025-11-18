@@ -1,9 +1,99 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ThermometerSun, Droplets, Sun, Volume2 } from "lucide-react";
 
 export default function SensorsTab({ temperature, humidity, lightLevel, soundLevel }) {
+  // Live sensor values, initialized from props as fallback
+  const [liveTemperature, setLiveTemperature] = useState(temperature);
+  const [liveHumidity, setLiveHumidity] = useState(humidity);
+  const [liveLightLevel, setLiveLightLevel] = useState(lightLevel);
+  const [liveSoundLevel, setLiveSoundLevel] = useState(soundLevel);
+
+  // Public API base URL (core)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+  // نسبة الضوء النهائية المعروضة (0–100%)
+  const lightPercent = Math.max(
+    0,
+    Math.min(100, Math.round(liveLightLevel))
+  );
+
+  // Periodically fetch sensor data from core every 10 seconds
+  useEffect(() => {
+    if (!API_BASE_URL) {
+      console.warn(
+        "NEXT_PUBLIC_API_BASE_URL is not set, SensorsTab will use fallback props only."
+      );
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchSensors = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sensors`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error(`Sensors request failed with status ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (!isMounted) return;
+
+        console.log("🔌 SensorsTab fetched sensors:", data);
+
+        // Update temperature if provided
+        if (typeof data.temperature === "number") {
+          setLiveTemperature(data.temperature);
+        }
+
+        // Update humidity if provided
+        if (typeof data.humidity === "number") {
+          setLiveHumidity(data.humidity);
+        }
+
+        // Map light data (visible → 0–100%)
+        if (data.light) {
+          const visibleRaw =
+            typeof data.light.visible === "number"
+              ? data.light.visible
+              : typeof data.light.ch0 === "number"
+              ? data.light.ch0
+              : 0;
+
+          // Example: visible 0–100 → 0–100%, >100 = 100%
+          const normalized = Math.max(0, Math.min(100, visibleRaw));
+
+          console.log("💡 visibleRaw =", visibleRaw, " → normalized =", normalized);
+          setLiveLightLevel(Math.round(normalized));
+        }
+
+        // Update sound level if provided
+        if (data.sound && typeof data.sound.levelDb === "number") {
+          setLiveSoundLevel(data.sound.levelDb);
+        }
+      } catch (err) {
+        console.error("Failed to fetch sensors from core in SensorsTab:", err);
+      }
+    };
+
+    // Initial fetch
+    fetchSensors();
+    // Poll every 10 seconds
+    const intervalId = setInterval(fetchSensors, 10000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [API_BASE_URL]);
+
   // Animation presets
   const fadeUp = {
     initial: { opacity: 0, y: 20 },
@@ -13,7 +103,7 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
 
   return (
     <motion.div
-      className="grid grid-cols-1 md:grid-cols-2 gap-6"
+      className="grid grid-cols-1 md-grid-cols-2 gap-6"
       initial="initial"
       animate="animate"
       exit="initial"
@@ -29,16 +119,16 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
 
         <div className="text-center mb-6">
           <motion.div
-            key={temperature.toFixed(1)}
+            key={liveTemperature.toFixed(1)}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
             className="text-6xl font-bold text-white mb-2"
           >
-            {temperature.toFixed(1)}°C
+            {liveTemperature.toFixed(1)}°C
           </motion.div>
           <p className="text-white/60">
-            {temperature < 19 ? "Koud" : temperature > 22 ? "Warm" : "Comfortabel"}
+            {liveTemperature < 19 ? "Koud" : liveTemperature > 22 ? "Warm" : "Comfortabel"}
           </p>
         </div>
 
@@ -54,13 +144,13 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
             <motion.div
               className="bg-gradient-to-r from-blue-400 via-green-400 to-red-400 h-full"
               initial={{ width: 0 }}
-              animate={{ width: `${((temperature - 16) / 8) * 100}%` }}
+              animate={{ width: `${((liveTemperature - 16) / 8) * 100}%` }}
               transition={{ duration: 0.6, ease: "easeOut" }}
             />
           </div>
         </div>
 
-        {temperature > 22 && (
+        {liveTemperature > 22 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -84,16 +174,16 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
 
         <div className="text-center mb-6">
           <motion.div
-            key={humidity.toFixed(0)}
+            key={liveHumidity.toFixed(0)}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
             className="text-6xl font-bold text-white mb-2"
           >
-            {humidity.toFixed(0)}%
+            {liveHumidity.toFixed(0)}%
           </motion.div>
           <p className="text-white/60">
-            {humidity < 40 ? "Te droog" : humidity > 60 ? "Te vochtig" : "Ideaal"}
+            {liveHumidity < 40 ? "Te droog" : liveHumidity > 60 ? "Te vochtig" : "Ideaal"}
           </p>
         </div>
 
@@ -109,13 +199,13 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
             <motion.div
               className="bg-gradient-to-r from-orange-400 via-blue-400 to-purple-400 h-full"
               initial={{ width: 0 }}
-              animate={{ width: `${((humidity - 30) / 40) * 100}%` }}
+              animate={{ width: `${((liveHumidity - 30) / 40) * 100}%` }}
               transition={{ duration: 0.6, ease: "easeOut" }}
             />
           </div>
         </div>
 
-        {humidity >= 40 && humidity <= 60 && (
+        {liveHumidity >= 40 && liveHumidity <= 60 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -139,16 +229,20 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
 
         <div className="text-center mb-6">
           <motion.div
-            key={lightLevel}
+            key={lightPercent}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
             className="text-6xl font-bold text-white mb-2"
           >
-            {lightLevel}%
+            {lightPercent}%
           </motion.div>
           <p className="text-white/60">
-            {lightLevel < 20 ? "Donker" : lightLevel < 50 ? "Gedimpt" : "Licht"}
+            {lightPercent < 20
+              ? "Donker"
+              : lightPercent < 50
+              ? "Gedimpt"
+              : "Licht"}
           </p>
         </div>
 
@@ -168,7 +262,7 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
             <motion.div
               className="bg-gradient-to-r from-purple-400 via-pink-400 to-yellow-300 h-full"
               initial={{ width: 0 }}
-              animate={{ width: `${lightLevel}%` }}
+              animate={{ width: `${lightPercent}%` }}
               transition={{ duration: 0.6, ease: "easeOut" }}
             />
           </div>
@@ -192,16 +286,16 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
 
         <div className="text-center mb-6">
           <motion.div
-            key={soundLevel.toFixed(0)}
+            key={liveSoundLevel.toFixed(0)}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
             className="text-6xl font-bold text-white mb-2"
           >
-            {soundLevel.toFixed(0)} <span className="text-3xl">dB</span>
+            {liveSoundLevel.toFixed(0)} <span className="text-3xl">dB</span>
           </motion.div>
           <p className="text-white/60">
-            {soundLevel < 30 ? "Stil" : soundLevel < 50 ? "Normaal" : "Luid"}
+            {liveSoundLevel < 30 ? "Stil" : liveSoundLevel < 50 ? "Normaal" : "Luid"}
           </p>
         </div>
 
@@ -224,7 +318,7 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
           </div>
         </motion.div>
 
-        {soundLevel < 35 && (
+        {liveSoundLevel < 35 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -234,13 +328,15 @@ export default function SensorsTab({ temperature, humidity, lightLevel, soundLev
           </motion.div>
         )}
 
-        {soundLevel > 50 && (
+        {liveSoundLevel > 50 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-yellow-500/20 rounded-lg p-3 border border-yellow-500/30"
           >
-            <p className="text-yellow-200 text-sm">⚠️ Verhoogd geluidsniveau gedetecteerd</p>
+            <p className="text-yellow-200 text-sm">
+              ⚠️ Verhoogd geluidsniveau gedetecteerd
+            </p>
           </motion.div>
         )}
       </motion.div>
