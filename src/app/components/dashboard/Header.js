@@ -1,25 +1,23 @@
 "use client";
 import React from "react";
-import { Bell, LogOut, Moon } from "lucide-react";
+import Image from "next/image";
+import { Bell, LogOut } from "lucide-react";
 
 export default function Header({ handleLogout, setEmergencyAlert, coreStatus }) {
   const { online, checking } = coreStatus || {};
 
   // Derive UI state for the status pill
   let statusText = "Roomie offline";
-  let pillClass =
-    "bg-red-500/10 border-red-400/40 text-red-100";
+  let pillClass = "bg-red-500/10 border-red-400/40 text-red-100";
   let dotClass = "bg-red-400";
 
   if (checking) {
     statusText = "Verbinding controleren…";
-    pillClass =
-      "bg-yellow-500/10 border-yellow-400/40 text-yellow-100";
+    pillClass = "bg-yellow-500/10 border-yellow-400/40 text-yellow-100";
     dotClass = "bg-yellow-300 animate-pulse";
   } else if (online) {
     statusText = "Roomie actief";
-    pillClass =
-      "bg-emerald-500/10 border-emerald-400/40 text-emerald-100";
+    pillClass = "bg-emerald-500/10 border-emerald-400/40 text-emerald-100";
     dotClass = "bg-emerald-400 animate-ping";
   }
 
@@ -29,15 +27,19 @@ export default function Header({ handleLogout, setEmergencyAlert, coreStatus }) 
         {/* Left Section - Logo and Title */}
         <div className="flex items-center gap-3 text-center sm:text-left">
           <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg flex-shrink-0">
-            <Moon className="w-6 h-6 text-white" />
+            <Image
+              src="/roomie.svg"
+              alt="Roomie logo"
+              width={36}
+              height={36}
+              className="w-10 h-11"
+            />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">
               Roomie Dashboard
             </h1>
-            <p className="text-sm text-purple-200">
-              Kamer van Manisa en Sam
-            </p>
+            <p className="text-sm text-purple-200">Kamer van Manisa en Sam</p>
           </div>
         </div>
 
